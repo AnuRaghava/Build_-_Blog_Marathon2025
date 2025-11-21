@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Safety Agent</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', sans-serif; }
+        .container { max-width: 800px; margin-top: 30px; padding-bottom: 50px; }
+        .card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
+        .header-bg { background: linear-gradient(135deg, #0061f2 0%, #6900f2 100%); color: white; padding: 30px; text-align: center; }
+        .btn-primary { background-color: #0061f2; border: none; padding: 12px; font-weight: 600; }
+        .status-badge { font-size: 1.1em; padding: 8px 16px; border-radius: 50px; }
+        
+        /* Image Preview Styles */
+        #imagePreviewContainer { display: none; position: relative; margin-top: 15px; }
+        #imagePreview { width: 100%; max-height: 300px; object-fit: cover; border-radius: 10px; border: 2px solid #ddd; }
+        .remove-img { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; border-radius: 50%; padding: 5px 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <div class="header-bg">
+            <h2>📸 Food Safety Compliance</h2>
+            <p class="mb-0">Take a photo or enter details to verify safety</p>
+        </div>
+        <div class="card-body p-4">
+            
+            <form id="agentForm">
+                <!-- 1. Camera Input (The Live Capture) -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">📸 Evidence (Photo)</label>
+                    <!-- accept="image/*" allows files, capture="environment" forces rear camera on mobile -->
+                    <input type="file" class="form-control" id="cameraInput" accept="image/*" capture="environment">
+                    
+                    <div id="imagePreviewContainer">
+                        <img id="imagePreview" src="" alt="Preview">
+                        <span class="remove-img" onclick="clearImage()">✕</span>
+                    </div>
+                </div>
+
+                <!-- 2. Context Fields -->
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Location</label>
+                        <select class="form-select" id="location">
+                            <option value="Kitchen Prep">Kitchen Prep Area</option>
+                            <option value="Cold Storage">Cold Storage</option>
+                            <option value="Service Counter">Service Counter</option>
+                            <option value="Dry Storage">Dry Storage</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Expiry Date (Optional)</label>
+                        <input type="date" class="form-control" id="expiryDate">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Description / Notes</label>
+                    <textarea class="form-control" id="description" rows="2" placeholder="E.g., 'Smell is sour' or 'Package damaged'"></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 btn-lg">
+                    🔍 Analyze Compliance
+                </button>
+            </form>
+
+            <!-- Loading & Results -->
+            <div id="loading" class="text-center my-4" style="display:none;">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Uploading image & Analyzing...</p>
+            </div>
+
+            <div id="resultSection" class="mt-4" style="display:none;">
+                <hr>
+                <div class="text-center mb-3">
+                    <span id="statusBadge" class="badge status-badge bg-secondary">Analyzing...</span>
+                </div>
+                <div class="alert alert-light border">
+                    <strong>🤖 Analysis:</strong>
+                    <p id="reasoning" class="mb-0 mt-1"></p>
+                </div>
+                <div class="alert alert-warning">
+                    <strong>⚠️ Action Required:</strong>
+                    <p id="actionPlan" class="mb-0 fw-bold"></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    // Handle Image Preview
+    const cameraInput = document.getElementById('cameraInput');
+    const previewContainer = document.getElementById('imagePreviewContainer');
+    const previewImage = document.getElementById('imagePreview');
+    let base64ImageString = null;
+
+    cameraInput.addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+                previewContainer.style.display = 'block';
+                // Extract pure Base64 (remove "data:image/jpeg;base64,")
+                base64ImageString = e.target.result.split(',')[1];
+            }
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function clearImage() {
+        cameraInput.value = "";
+        base64ImageString = null;
+        previewContainer.style.display = 'none';
+    }
+
+    // Handle Form Submit
+    document.getElementById('agentForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('resultSection').style.display = 'none';
+
+        const payload = {
+            location: document.getElementById('location').value,
+            expiry_date: document.getElementById('expiryDate').value,
+            description: document.getElementById('description').value,
+            image_base64: base64ImageString // Send the image data
+        };
+
+        try {
+            const response = await fetch('/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            renderResult(data.result || data);
+
+        } catch (error) {
+            alert("Error: " + error);
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    });
+
+    function renderResult(data) {
+        document.getElementById('resultSection').style.display = 'block';
+        
+        document.getElementById('reasoning').innerText = data.reasoning || JSON.stringify(data);
+        document.getElementById('actionPlan').innerText = data.action_plan || data.recommended_action || "Check Manually";
+        
+        const badge = document.getElementById('statusBadge');
+        let status = (data.compliance_status || "INFO").toUpperCase();
+        badge.innerText = status;
+        
+        badge.className = 'badge status-badge ';
+        if (status.includes("NON") || status.includes("FAIL") || status.includes("EXPIRED")) badge.classList.add('bg-danger');
+        else if (status.includes("WARN") || status.includes("HUMAN")) badge.classList.add('bg-warning', 'text-dark');
+        else badge.classList.add('bg-success');
+    }
+</script>
+</body>
+</html>
